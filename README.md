@@ -2,157 +2,160 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import json
-import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Вспомогательные функции
-def validate_date(date_string):
-    try:
-        datetime.strptime(date_string, "%Y-%m-%d")
-        return True
-    except ValueError:
-        return False
-
-def load_tasks():
-    try:
-        with open("tasks.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
-
-def save_tasks(tasks):
-    with open("tasks.json", "w", encoding="utf-8") as f:
-        json.dump(tasks, f, ensure_ascii=False, indent=4)
-
-def generate_random_task():
-    titles = ["Подготовить отчёт", "Провести встречу", "Проверить документы", "Ответить на письма", "Обновить базу данных"]
-    descriptions = ["Выполнить анализ данных за последний квартал", "Обсудить план на следующий месяц", "Убедиться в корректности информации", "Ответить всем отправителям", "Добавить новые записи"]
-    statuses = ["В работе", "Завершена", "Отложена"]
-    
-    random_date = datetime.now() + timedelta(days=random.randint(1, 30))
-    
-    return {
-        "id": random.randint(1000, 9999),
-        "title": random.choice(titles),
-        "description": random.choice(descriptions),
-        "due_date": random_date.strftime("%Y-%m-%d"),
-        "status": random.choice(statuses)
-    }
-
-# Класс приложения
-class TaskManagerApp:
+class WeatherDiaryApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Менеджер задач")
-        self.tasks = load_tasks()
-        self.setup_ui()
+        self.root.title("Weather Diary")
+        self.entries = []
+        self.load_data()
 
-    def setup_ui(self):
         # Поля ввода
-        tk.Label(self.root, text="Название:").grid(row=0, column=0, sticky="w")
-        self.title_entry = tk.Entry(self.root, width=30)
-        self.title_entry.grid(row=0, column=1, padx=5, pady=5)
+        ttk.Label(root, text="Дата (YYYY-MM-DD):").grid(row=0, column=0, padx=5, pady=5)
+        self.date_entry = ttk.Entry(root)
+        self.date_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        tk.Label(self.root, text="Описание:").grid(row=1, column=0, sticky="w")
-        self.desc_entry = tk.Text(self.root, width=30, height=3)
-        self.desc_entry.grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(root, text="Температура (°C):").grid(row=1, column=0, padx=5, pady=5)
+        self.temp_entry = ttk.Entry(root)
+        self.temp_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        tk.Label(self.root, text="Срок выполнения (YYYY-MM-DD):").grid(row=2, column=0, sticky="w")
-        self.date_entry = tk.Entry(self.root, width=30)
-        self.date_entry.grid(row=2, column=1, padx=5, pady=5)
+        ttk.Label(root, text="Описание погоды:").grid(row=2, column=0, padx=5, pady=5)
+        self.desc_entry = ttk.Entry(root)
+        self.desc_entry.grid(row=2, column=1, padx=5, pady=5)
 
-        tk.Label(self.root, text="Статус:").grid(row=3, column=0, sticky="w")
-        self.status_var = tk.StringVar(value="В работе")
-        status_combo = ttk.Combobox(self.root, textvariable=self.status_var,
-                                   values=["В работе", "Завершена", "Отложена"])
-        status_combo.grid(row=3, column=1, padx=5, pady=5)
+        ttk.Label(root, text="Осадки:").grid(row=3, column=0, padx=5, pady=5)
+        self.precip_var = tk.BooleanVar()
+        ttk.Checkbutton(root, variable=self.precip_var).grid(row=3, column=1, sticky='w', padx=5, pady=5)
 
-        # Кнопки
-        tk.Button(self.root, text="Добавить задачу", command=self.add_task).grid(row=4, column=0, pady=10)
-        tk.Button(self.root, text="Сгенерировать случайную задачу",
-                 command=self.generate_random).grid(row=4, column=1, pady=10)
-        tk.Button(self.root, text="Сохранить задачи", command=lambda: save_tasks(self.tasks)).grid(row=5, column=0, pady=5)
-        tk.Button(self.root, text="Загрузить задачи", command=self.load_and_refresh).grid(row=5, column=1, pady=5)
+        # Кнопка добавления
+        ttk.Button(root, text="Добавить запись", command=self.add_entry).grid(row=4, column=0, columnspan=2, pady=10)
 
-        # Фильтрация
-        tk.Label(self.root, text="Фильтр по статусу:").grid(row=6, column=0, sticky="w", pady=(10, 0))
-        self.filter_var = tk.StringVar(value="Все")
-        filter_combo = ttk.Combobox(self.root, textvariable=self.filter_var,
-                               values=["Все", "В работе", "Завершена", "Отложена"])
-        filter_combo.grid(row=6, column=1, pady=(10, 0))
+        # Таблица для отображения записей
+        self.tree = ttk.Treeview(root, columns=('Date', 'Temp', 'Desc', 'Precip'), show='headings')
+        self.tree.heading('Date', text='Дата')
+        self.tree.heading('Temp', text='Температура')
+        self.tree.heading('Desc', text='Описание')
+        self.tree.heading('Precip', text='Осадки')
+        self.tree.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
 
-        tk.Button(self.root, text="Применить фильтр", command=self.apply_filter).grid(row=7, column=0, columnspan=2, pady=5)
+        # Фильтры
+        ttk.Label(root, text="Фильтр по дате:").grid(row=6, column=0, padx=5, pady=5)
+        self.filter_date_entry = ttk.Entry(root)
+        self.filter_date_entry.grid(row=6, column=1, padx=5, pady=5)
 
-        # Таблица задач
-        columns = ("ID", "Название", "Срок", "Статус")
-        self.tree = ttk.Treeview(self.root, columns=columns, show="headings", height=8)
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=120)
-        self.tree.grid(row=8, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+        ttk.Label(root, text="Фильтр по температуре (>):").grid(row=7, column=0, padx=5, pady=5)
+        self.filter_temp_entry = ttk.Entry(root)
+        self.filter_temp_entry.grid(row=7, column=1, padx=5, pady=5)
 
-        self.refresh_task_list()
+        ttk.Button(root, text="Применить фильтры", command=self.apply_filters).grid(row=8, column=0, columnspan=2, pady=10)
+        ttk.Button(root, text="Сбросить фильтры", command=self.reset_filters).grid(row=9, column=0, columnspan=2, pady=5)
 
-    def add_task(self):
-        title = self.title_entry.get().strip()
-        desc = self.desc_entry.get("1.0", "end-1c").strip()
-        date_str = self.date_entry.get().strip()
-        status = self.status_var.get()
+    def add_entry(self):
+        date_str = self.date_entry.get()
+        temp_str = self.temp_entry.get()
+        desc = self.desc_entry.get()
+        precip = self.precip_var.get()
 
-        if not title:
-            messagebox.showerror("Ошибка", "Название задачи обязательно!")
-            return
-        if date_str and not validate_date(date_str):
-            messagebox.showerror("Ошибка", "Некорректный формат даты! Используйте YYYY-MM-DD.")
+        # Валидация
+        if not self.validate_input(date_str, temp_str, desc):
             return
 
-        task = {
-            "id": len(self.tasks) + 1,
-            "title": title,
-            "description": desc,
-            "due_date": date_str if date_str else "Не указана",
-            "status": status
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            temp = float(temp_str)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Неверный формат даты или температуры")
+            return
+
+        entry = {
+            'date': date_str,
+            'temperature': temp,
+            'description': desc,
+            'precipitation': 'да' if precip else 'нет'
         }
-        self.tasks.append(task)
-        save_tasks(self.tasks)
-        self.refresh_task_list()
+        self.entries.append(entry)
+        self.update_table()
+        self.save_data()  # Автосохранение
         self.clear_inputs()
 
-    def clear_inputs(self):
-        self.title_entry.delete(0, tk.END)
-        self.desc_entry.delete("1.0", tk.END)
-        self.date_entry.delete(0, tk.END)
-        self.status_var.set("В работе")
+    def validate_input(self, date_str, temp_str, desc):
+        if not date_str:
+            messagebox.showerror("Ошибка", "Дата не может быть пустой")
+            return False
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            messagebox.showerror("Ошибка", "Неверный формат даты. Используйте YYYY-MM-DD")
+            return False
 
-    def refresh_task_list(self, filtered_tasks=None):
+        if not temp_str:
+            messagebox.showerror("Ошибка", "Температура не может быть пустой")
+            return False
+        try:
+            float(temp_str)
+        except ValueError:
+            messagebox.showerror("Ошибка", "Температура должна быть числом")
+            return False
+
+        if not desc:
+            messagebox.showerror("Ошибка", "Описание не может быть пустым")
+            return False
+        return True
+
+    def apply_filters(self):
+        filtered = self.entries
+        date_filter = self.filter_date_entry.get()
+        temp_filter_str = self.filter_temp_entry.get()
+
+        if date_filter:
+            filtered = [e for e in filtered if e['date'] == date_filter]
+        if temp_filter_str:
+            try:
+                temp_filter = float(temp_filter_str)
+                filtered = [e for e in filtered if e['temperature'] > temp_filter]
+            except ValueError:
+                messagebox.showerror("Ошибка", "Температура фильтра должна быть числом")
+                return
+        self.update_table(filtered)
+
+    def reset_filters(self):
+        self.filter_date_entry.delete(0, tk.END)
+        self.filter_temp_entry.delete(0, tk.END)
+        self.update_table()
+
+    def update_table(self, entries=None):
         for item in self.tree.get_children():
             self.tree.delete(item)
-        tasks_to_show = filtered_tasks if filtered_tasks is not None else self.tasks
-        for task in tasks_to_show:
-            self.tree.insert("", "end", values=(
-                task["id"], task["title"], task["due_date"], task["status"]
+        entries = entries or self.entries
+        for entry in entries:
+            self.tree.insert('', 'end', values=(
+                entry['date'],
+                f"{entry['temperature']}°C",
+                entry['description'],
+                entry['precipitation']
             ))
 
-    def apply_filter(self):
-        filter_status = self.filter_var.get()
-        if filter_status == "Все":
-            self.refresh_task_list()
-        else:
-            filtered = [t for t in self.tasks if t["status"] == filter_status]
-            self.refresh_task_list(filtered)
+    def save_data(self):
+        with open('data.json', 'w', encoding='utf-8') as f:
+            json.dump(self.entries, f, ensure_ascii=False, indent=4)
 
-    def load_and_refresh(self):
-        self.tasks = load_tasks()
-        self.refresh_task_list()
+    def load_data(self):
+        try:
+            with open('data.json', 'r', encoding='utf-8') as f:
+                self.entries = json.load(f)
+            self.update_table()
+        except FileNotFoundError:
+            self.entries = []
 
-    def generate_random(self):
-        random_task = generate_random_task()
-        self.tasks.append(random_task)
-        save_tasks(self.tasks)
-        self.refresh_task_list()
+    def clear_inputs(self):
+        self.date_entry.delete(0, tk.END)
+        self.temp_entry.delete(0, tk.END)
+        self.desc_entry.delete(0, tk.END)
+        self.precip_var.set(False)
 
 # Запуск приложения
 if __name__ == "__main__":
     root = tk.Tk()
-    app = TaskManagerApp(root)
+    app = WeatherDiaryApp(root)
     root.mainloop()
